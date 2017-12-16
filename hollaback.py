@@ -13,8 +13,9 @@ class hollaback(object):
     cred_file = expanduser("~") + "/.config/hollaback.json"
     color = True # color terminal
 
-    def __init__(self):
+    def __init__(self, nick="default"):
         self.ses = requests.Session()
+        self.nick = nick
         self.parse_cred_file()
         if not self.login():
             raise Exception("Login failed")
@@ -33,7 +34,7 @@ class hollaback(object):
         except:
             return res.content
 
-    def block(self, token, visits=1, sleep=1, p=True, ppcheck=False, ppvisit=False):
+    def block(self, token, visits=1, sleep=1, p=True, ppcheck=False, ppvisit=False, forever=False):
         """
         Block and wait until the callback url has reached `visits` number of
         vists. Check the Dict returned for "Success" == True. The returned dict
@@ -55,7 +56,7 @@ class hollaback(object):
 
         prev = start = d[ "visited" ]
         last = start+visits
-        while d["visited"] < last:
+        while forever or d["visited"] < last:
             time.sleep(sleep)
             d = holla.check(token)
             if d["Success"] != True:
@@ -150,7 +151,7 @@ class hollaback(object):
 
     def parse_cred_file(self):
         with open(self.cred_file, "r") as fp:
-            data = json.load(fp);
+            data = json.load(fp)[self.nick];
         self.creds = data["creds"]
         self.serv  = data["serv"]
 
@@ -161,7 +162,7 @@ def _holla_fail(msg):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Interact with a Hollaback Server")
-    parser.add_argument('-q','--quick', action="store_true", help='Quck run, create a single use callback URL and wait for it to be called')
+    parser.add_argument('-q','--quick', action="store_true", help='Like tailing the logs for a single URL, ctrl+c to stop')
     parser.add_argument('-g','--get', action="store_true", help='Get a callback url')
     parser.add_argument('-c','--check', action="store_true", help='Check on a callback token (-t required)')
     parser.add_argument('-b','--block', action="store_true", help='Check every second until callback is used (-t required)')
@@ -224,7 +225,7 @@ if __name__ == "__main__":
         if not token and not token:
             _holla_fail("Need token to check")
         try:
-            d = holla.block(token)
+            d = holla.block(token, forever=True)
             if d["Success"] != True:
                 _holla_fail("Failed: %s " % d["msg"])
         except KeyboardInterrupt:
