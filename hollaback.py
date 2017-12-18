@@ -62,9 +62,10 @@ class hollaback(object):
             if d["Success"] != True:
                 return d
             if p and prev < d["visited"]:
-                prev = d["visited"]
                 ppcheck(d)
-                ppvisit( self.getvisit(token, d["visited"]-1) )
+                for i in xrange(prev, d["visited"] ):
+                    ppvisit( self.getvisit(token, d["visited"]-1) )
+                prev = d["visited"]
         return d
 
     def _str_escape(self, s):
@@ -87,7 +88,13 @@ class hollaback(object):
 
         for key, value in check.iteritems():
             if value and key not in ["Success", "comment", "token", ]:
-                print("%-15s %s" % (key, self._str_escape( value )))
+                t = type(value)
+                if t == str or t == unicode:
+                    print("%-15s %s" % (key, self._str_escape( value )))
+                elif type(value) == int:
+                    print("%-15s %d" % (key, value))
+                else:
+                    print("%-15s unexpected type: %s" % ( key, t ))
         if check["comment"]:
             print("-- comment --\n%s\n---------" % self._str_escape( check["comment"] ))
 
@@ -95,6 +102,13 @@ class hollaback(object):
         """
         pretty prints the visit information
         """
+        if not visit["Success"]:
+            if self.color:
+                print("\033[31m[**] Error: %s\033[0m" % visit["msg"])
+            else:
+                print("[**] Error: %s" % visit["msg"])
+            return
+
         msg = "[**] visit:"
         if self.color:
             print("\033[92m%s\033[0m" % msg)
@@ -133,15 +147,17 @@ class hollaback(object):
         else:
             return False
 
+    def listpayloads(self):
+        url = "%s%s" % (self.serv, "/holla/listpayloads.php")
+        res = self.ses.get(url)
+        return res.json()
+
     def check(self, token):
         url = "%s%s" % (self.serv, "/holla/check.php")
         res = self.ses.get(url, params={"token":token})
-        try:
-            return res.json()
-        except:
-            return res.content
+        return res.json()
 
-    def enque(self, comment="", test_name="", cust_name="", reply_method="", ttl=0, consume=0):
+    def enque(self, comment="", test_name="", cust_name="", reply_method="", ttl=0, consume=0, payid=0, payparam=""):
         """
         Add a new callback URL to the server
         """
@@ -168,12 +184,15 @@ if __name__ == "__main__":
     parser.add_argument('-b','--block', action="store_true", help='Check every second until callback is used (-t required)')
     parser.add_argument('-t','--token', help='Token value')
     parser.add_argument('-v', '--visit',  help='Get details of visit for visit numer')
+    parser.add_argument('-l', '--list',  action="store_true", help='List the payloads on the server')
     parser.add_argument('--comment', help='Comment to save on server')
     parser.add_argument('--test_name', help='Test name to save on server')
     parser.add_argument('--cust_name', help='Customer name to save on server')
     parser.add_argument('--ttl', help='TTL of callback URL')
     parser.add_argument('--reply_method', help='How it should respond') # does not work on server yet
-    parser.add_argument('--consume', help='Int number of times used before consumed')
+    parser.add_argument('--consume', default=0, type=int, help='Int number of times used before consumed')
+    parser.add_argument('--payid', default=0, type=int, help='index of payload to be used')
+    parser.add_argument('--payparam', type=str, help='String to be passed as a parameter to the payload')
     parser.add_argument('--clean', action="store_true", help='Remove token info from the server when you are done')
     parser.add_argument('--nc', action="store_true", help='Remove color display')
 
@@ -183,12 +202,24 @@ if __name__ == "__main__":
 
 
     holla = hollaback()
+
+    if args.list:
+        payloads = holla.listpayloads()
+        if not payloads["Success"]:
+            _holla_fail("error: %s" % payloads["msg"])
+            
+        print "Available payloads"
+        for i,p in enumerate( payloads["payloads"] ):
+            print("%2d: %-15s %s" % (i, p["name"], p["desc"]))
+        exit(0)
+
     if args.nc:
         holla.color = False
     if args.token:
         token = args.token
     else:
         token = ""
+
     if args.get or args.quick:
         if token: _holla_fail("Can't use token here, exiting")
         a = vars(args)
@@ -198,9 +229,13 @@ if __name__ == "__main__":
             "cust_name"     :  args.cust_name,
             "reply_method"  :  args.reply_method,
             "ttl"           :  args.ttl,
-            "consume"       :  args.consume
+            "consume"       :  args.consume,
+            "payid"         :  args.payid,
+            "payparam"      :  args.payparam
         }
         a = holla.enque(**a)
+        if not a["Success"]:
+            _holla_fail("[!!] error: %s" % a["msg"])
         print("token: %s" % a["token"])
         print("url: %s" % a["url"])
         token = a["token"]
